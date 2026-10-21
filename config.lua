@@ -3,6 +3,7 @@ Config = {
     RequiredCoreContract = 1,
     ReadinessTimeoutMs = 30000,
     DevMode = false,
+    Grants = { Managers = {}, Readers = {}, Auditors = {}, MaxValidityMs = 31622400000, CheckTimeoutMs = 5000 },
     Providers = {
         TimeoutMs = 2000,
         MaxInFlight = 32,
@@ -10,12 +11,15 @@ Config = {
         Targets = {},
         -- Organization UUID -> authoritative membership resource.
         Memberships = {},
-        TrustedReaders = {},
+        TrustedReaders = { ['feather-access'] = true },
     },
 }
 
 -- Isolated acceptance resource only. Never enable this on production.
 if Config.DevMode then
+    Config.Grants.Managers['feather-access-tests'] = true
+    Config.Grants.Readers['feather-access-tests'] = true
+    Config.Grants.Auditors['feather-access-tests'] = true
     Config.Providers.Targets['access_test.property'] = {
         resource = 'feather-access-tests', capabilities = { 'property.enter' },
     }

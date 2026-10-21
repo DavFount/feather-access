@@ -5,6 +5,16 @@ RegisterCommand('AccessStatus', function(source)
         health.state, health.phase, tostring(health.migrations.verified),
         health.providers.targets, health.providers.memberships, health.providers.inFlight, tostring(Config.DevMode)))
     if health.failure then print('[AccessStatus] failure=' .. tostring(health.failure.code)) end
+    local counts = {}
+    for _, group in ipairs({ 'Managers', 'Readers', 'Auditors' }) do
+        counts[group] = 0
+        for _, enabled in pairs(Config.Grants[group]) do if enabled == true then counts[group] = counts[group] + 1 end end
+    end
+    print(('[AccessStatus] grantManagers=%d grantReaders=%d grantAuditors=%d fixtureManager=%s fixtureReader=%s fixtureAuditor=%s'):format(
+        counts.Managers, counts.Readers, counts.Auditors,
+        tostring(Config.Grants.Managers['feather-access-tests'] == true),
+        tostring(Config.Grants.Readers['feather-access-tests'] == true),
+        tostring(Config.Grants.Auditors['feather-access-tests'] == true)))
 end, true)
 
 RegisterCommand('AccessReleaseContractSmokeTest', function(source)
@@ -16,11 +26,14 @@ RegisterCommand('AccessReleaseContractSmokeTest', function(source)
     end
     for _, owner in pairs(Config.Providers.Memberships) do fixtureTrusted = fixtureTrusted or owner == 'feather-access-tests' end
     fixtureTrusted = fixtureTrusted or Config.Providers.TrustedReaders['feather-access-tests'] == true
+    for _, group in ipairs({ 'Managers', 'Readers', 'Auditors' }) do
+        fixtureTrusted = fixtureTrusted or Config.Grants[group]['feather-access-tests'] == true
+    end
     local tests = {
         { 'ready', health.state == 'ready' },
         { 'migrations verified', health.migrations.verified == true },
         { 'providers supported', caps.features.targetProviders == 1 and caps.features.membershipProviders == 1 },
-        { 'grants unavailable', caps.features.grants == 0 and caps.features.capabilityChecks == 0 },
+        { 'grant services supported', caps.features.grants == 1 and caps.features.capabilityChecks == 1 },
         { 'development disabled', Config.DevMode == false },
         { 'fixture not trusted', not fixtureTrusted },
         { 'fixture not running', GetResourceState('feather-access-tests') ~= 'started' },

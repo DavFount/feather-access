@@ -75,7 +75,7 @@ local function Public(entry)
     return { key = entry.key, resource = entry.resource, contract = 1, generation = entry.generation }
 end
 
-local function Register(bucket, key, resolver, caller, owner)
+local function Register(bucket, key, resolver, caller, owner, extra)
     local ready = Access.Ready()
     if not ready.ok then return ready end
     if not Resource(caller) or caller ~= owner then
@@ -87,27 +87,33 @@ local function Register(bucket, key, resolver, caller, owner)
     if not Callable(resolver) then return Access.Err('invalid_input', 'A callable resolver is required.') end
     if bucket[key] then return Access.Err('provider_conflict', 'Scope already registered; unregister before replacing.') end
     generation = generation + 1
-    local entry = { key = key, resource = caller, generation = generation, resolve = resolver }
+    local entry = { key = key, resource = caller, generation = generation, resolve = resolver, extra = extra }
     bucket[key] = entry
     return Access.Ok(Public(entry))
 end
 
 function Access.Providers.RegisterTarget(request, caller)
-    if not Access.OnlyFields(request, { targetType = true, contract = true, resolve = true })
+    if not Access.OnlyFields(request, { targetType = true, contract = true, resolve = true, authorize = true })
         or not Access.Key(request.targetType) or request.contract ~= 1 then
         return Access.Err('invalid_input', 'Target type, Contract 1 and resolver are required.')
     end
+    if request.authorize ~= nil and not Callable(request.authorize) then
+        return Access.Err('invalid_input', 'Target authorization callback must be callable.')
+    end
     local definition = Config.Providers.Targets[request.targetType]
-    return Register(targets, request.targetType, request.resolve, caller, definition and definition.resource)
+    return Register(targets, request.targetType, request.resolve, caller, definition and definition.resource, request.authorize)
 end
 
 function Access.Providers.RegisterMembership(request, caller)
-    if not Access.OnlyFields(request, { organizationId = true, contract = true, resolve = true })
+    if not Access.OnlyFields(request, { organizationId = true, contract = true, resolve = true, catalog = true })
         or not Access.Uuid(request.organizationId) or request.contract ~= 1 then
         return Access.Err('invalid_input', 'Organization UUID, Contract 1 and resolver are required.')
     end
+    if request.catalog ~= nil and not Callable(request.catalog) then
+        return Access.Err('invalid_input', 'Membership catalog callback must be callable.')
+    end
     local id = request.organizationId:lower()
-    return Register(memberships, id, request.resolve, caller, Config.Providers.Memberships[id])
+    return Register(memberships, id, request.resolve, caller, Config.Providers.Memberships[id], request.catalog)
 end
 
 local function Unregister(bucket, key, caller)
@@ -132,7 +138,7 @@ function Access.Providers.UnregisterMembership(request, caller)
     return Unregister(memberships, request.organizationId:lower(), caller)
 end
 
-local function Invoke(bucket, entry, request)
+local function Invoke(bucket, entry, request, callback)
     if inFlight >= Config.Providers.MaxInFlight then
         return Access.Err('provider_busy', 'Provider call limit reached.')
     end
@@ -147,7 +153,7 @@ local function Invoke(bucket, entry, request)
         Settle(Access.Err('provider_timeout', 'Provider did not reply within its deadline.'))
     end)
     CreateThread(function()
-        local called, result = pcall(function() return entry.resolve(request) end)
+        local called, result = pcall(function() return (callback or entry.resolve)(request) end)
         if not job.released then
             job.released = true
             jobs[job], inFlight = nil, inFlight - 1
@@ -171,6 +177,46 @@ local function Invoke(bucket, entry, request)
     local ready = Access.Ready()
     if not ready.ok then return ready end
     return result
+end
+
+-- Internal service helpers; no arbitrary callback invocation is exported.
+Access.Providers.RoleIds = function(value) return Keys(value, 32, true) end
+
+function Access.Providers.Authorize(context, actor, action, capability)
+    local entry = targets[context.targetType]
+    if not entry or entry.generation ~= context.provider.generation or not entry.extra then
+        return Access.Err('provider_unavailable', 'A current target-authority callback is required.')
+    end
+    local invoked = Invoke(targets, entry, { target = Access.Copy(context), actor = Access.Copy(actor),
+        action = action, capability = capability }, entry.extra)
+    if not invoked.ok then return invoked end
+    local result = invoked.value
+    if type(result) ~= 'table' or result.ok ~= true or type(result.value) ~= 'table'
+        or result.value.allowed ~= true then
+        return Access.Err('authorization_denied', 'Target provider denied management authority.')
+    end
+    return Access.Ok(true)
+end
+
+function Access.Providers.Catalog(organizationId)
+    local entry = memberships[organizationId]
+    if not entry or not entry.extra or GetResourceState(entry.resource) ~= 'started' then
+        return Access.Err('provider_unavailable', 'An organization role catalog is required.')
+    end
+    local invoked = Invoke(memberships, entry, { organizationId = organizationId }, entry.extra)
+    if not invoked.ok then return invoked end
+    local result = invoked.value
+    if type(result) ~= 'table' or result.ok ~= true or type(result.value) ~= 'table' then
+        return Access.Err('provider_invalid', 'Invalid organization role catalog.')
+    end
+    local value = result.value
+    local roles = type(value.roleIds) == 'table' and next(value.roleIds) == nil and {} or Keys(value.roleIds, 32, true)
+    if not Access.OnlyFields(value, { organizationId = true, status = true, roleIds = true })
+        or value.organizationId ~= organizationId or (value.status ~= 'active' and value.status ~= 'inactive')
+        or not roles or (value.status == 'inactive' and #roles > 0) then
+        return Access.Err('provider_invalid', 'Invalid organization role identity, state or roles.')
+    end
+    return Access.Ok({ organizationId = organizationId, status = value.status, roleIds = roles, provider = Public(entry) })
 end
 
 local function Lookup(bucket, key, caller)

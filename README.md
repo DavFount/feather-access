@@ -1,6 +1,6 @@
 # Feather Access
 
-Server-only provider foundation for durable capability delegation in Feather.
+Server-only durable capability delegation in Feather.
 
 Requires `feather-core` Contract 1 and `feather-mysql`. Start both first, then
 `ensure feather-access`. After manifest changes, run `refresh` before restarting
@@ -28,7 +28,7 @@ Targets = {
     },
 },
 Memberships = { ['organization-uuid'] = 'my-society' },
-TrustedReaders = { ['my-storage'] = true },
+TrustedReaders = { ['feather-access'] = true, ['my-storage'] = true },
 ```
 
 Replace `organization-uuid` with an actual lowercase UUID. No production providers
@@ -47,12 +47,20 @@ stop, so hung providers cannot create unlimited background work.
   Epoch is an integer from 1 to 9007199254740991. Status is `active`, `suspended`,
   `retired`, or `unavailable`; capabilities are a nonempty exact subset of the
   configured vocabulary.
+  To manage grants, supply `authorize(request)` as well. It receives `target`,
+  `actor`, `action` (`grant`, `revoke`, `list`) and optional `capability`, and must
+  return `{ ok = true, value = { allowed = true } }` only for a target-authorized
+  owner/manager or explicitly permitted system service. A recipient's grant alone
+  must never establish management authority.
 - `UnregisterTargetProvider({ targetType })` removes the caller's registration.
 - `RegisterMembershipProvider({ organizationId, contract = 1, resolve })`
   registers the configured membership owner for one organization UUID.
   `resolve({ organizationId, characterId })` returns a successful envelope with
   `{ organizationId, characterId, status, roleIds }`. Status is `active` or
   `inactive`; inactive membership must have no roles.
+  Organization grants also require a `catalog({ organizationId })` callback
+  returning `{ ok = true, value = { organizationId, status, roleIds } }` with
+  current active/inactive organization state and stable existing roles.
 - `UnregisterMembershipProvider({ organizationId })` removes the caller's registration.
 - `ResolveTargetContext({ targetType, targetId })` and
   `ResolveMembershipContext({ organizationId, characterId })` return validated
@@ -64,6 +72,58 @@ starting with a letter). Role IDs additionally accept lowercase UUIDs. Empty rol
 arrays confer no implicit eligibility. Providers echo normalized lowercase UUIDs.
 Responses include `{ provider = { key, resource, contract, generation } }`.
 Generation identifies a runtime registration; it is not a durable delegation epoch.
+
+## Durable grant API
+
+Configure `Config.Grants.Managers`, `Readers` and `Auditors` as exact resource-name
+boolean maps. They default empty. Managers may request target-authorized writes
+and target lists; Readers may check and recover their own operation receipts;
+Auditors may list grants by grantee. Grant services additionally require Core
+policy actions `access.grant.manage` / `access.grant.read` for the actual caller.
+With Admin's policy provider, add the corresponding service principal under
+`Config.servicePolicy['feather-access']`. Access cannot infer player management
+authority from that service permission; the target callback must still validate it.
+
+- `GrantCapability({ requestId, reasonCode, targetType, targetId, expectedEpoch,
+  granteeType, granteeId, capability, validFrom, validUntil, provenanceType,
+  provenanceId, roleIds?, actorSource? })` creates one immutable exact grant.
+  Validity uses UTC Unix milliseconds and lasts at most `MaxValidityMs` (default
+  366 days). Explicit finite end time is required. Character UUIDs resolve through
+  Core's persisted Character profile provider. Organization grants require at
+  least one current catalog role. Any selected matching role may qualify.
+- `RevokeGrant({ grantId, expectedRevision, requestId, reasonCode, actorSource? })`
+  revokes one grant. It does not require its grantee still to be eligible. Current
+  target-provider authority is required even for suspended/retired targets.
+- `CheckCapability({ targetType, targetId, capability, actorSource? , characterId? })`
+  requires exactly one active actor source or explicit offline character UUID
+  from a trusted server reader. Inspect `result.ok` and `result.value.allowed == true`.
+  Error envelopes and `allowed=false` both deny. Owning a target is a separate
+  provider/domain path; this API only checks durable delegation.
+- `ListTargetGrants({ targetType, targetId, limit?, cursor?, actorSource? })` and
+  `ListGranteeGrants({ granteeType, granteeId, limit?, cursor?, actorSource? })`
+  return historical `{ items, nextCursor? }`, with limit 1–50 (default 25) and
+  grant-UUID keyset cursors. Lists are not authorization decisions.
+- `FindOperation({ requestId })` returns `{ found, operation?, result? }` for the
+  calling service's own request namespace. Results are original snapshots; a
+  creation receipt can still say active after the underlying grant was revoked.
+
+`actorSource` derives account/character/session identity through Core. Omitting it
+requests an explicit server-service operation, which the target must authorize.
+No client mutation events are registered. Reusing the same caller/request ID with
+changed terms, actor identity or operation returns `idempotency_conflict`.
+Successful replay returns the original grant snapshot with `replayed=true` and
+never revives a revoked/expired grant. Separate overlapping grants are independent;
+revoking one does not revoke the others. Revoke by grant UUID.
+
+Checks use fresh target, organization and membership facts and DB-time validity;
+expiry needs no cleanup worker. They deny old ownership epochs and unavailable
+providers. More than 256 active candidate grants returns `limit_exceeded`; reconcile
+overlap instead of relying on an unbounded check. Online actor identity is checked
+after yielding; session lifecycle events also fence writes before commit.
+`CheckTimeoutMs` bounds accumulated context work (100–30000 ms, default 5000).
+Late positive results are denied; an already-running SQL/provider call still uses
+its own deadline and cannot be cancelled by this budget. An independent character
+grant does not depend on unrelated organization providers being online.
 
 Caller identity comes from the invoking resource. Registration scopes cannot be
 claimed by supplying a resource field. Registrations are ephemeral and are removed
@@ -77,14 +137,18 @@ Health and capability reads are diagnostic; they do not authorize access.
 `AccessStatus` and `AccessReleaseContractSmokeTest` are read-only server-console
 commands. The release smoke expects development mode off and the trusted fixture
 stopped. Run it after reverting test configuration before packaging.
+AccessStatus also reports the active grant trust counts and test-principal flags.
+Authorization errors identify `details.stage` (`access_trust` or `core_policy`),
+the required trust group/action and available policy decision metadata. Staff
+ownership is separate from service-principal authorization.
 
-This slice creates `feather_access_schema_migrations` and an empty
-`feather_access_receipts` foundation table. There are no grant/check/list services,
-grant records, client events, UI, audit publisher or production domain adapters.
-Those features report zero. `ready` means dependency/migration/provider foundation
-readiness; consumers must also require the feature version they need. Context
-resolution does not validate a grantor, authorize a character, preserve grants on
-transfer or serialize a later gameplay mutation.
+Access owns its schema-migration ledger, receipts, grants, audit events and pending
+outbox. State, receipt, event and outbox writes commit together. `eventPublication`
+remains zero: Audit delivery is not implemented yet. Preserve all these tables
+together for backup/restore. No production domain adapter or Inventory ACL cutover
+is enabled. No transfer-preservation workflow, client UI or reservation for later
+gameplay mutations is implemented. Checks overlapping revocation/transfer may order
+either way; consumers must enforce their own mutation-boundary safeguards.
 
 Design and implementation documentation lives in
 [feather-framework-docs](../feather-framework-docs/feather-access/ACCESS_IMPLEMENTATION_PLAN.md).

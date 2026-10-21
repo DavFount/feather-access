@@ -1,5 +1,5 @@
 Access.Migrations = {}
-Access.MigrationStatus = { total = 1, applied = 0, verified = false }
+Access.MigrationStatus = { total = 2, applied = 0, verified = false }
 
 local definitions = {
     { id = '001_access_receipts', statements = {
@@ -11,6 +11,39 @@ local definitions = {
             `result_json` LONGTEXT NOT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`source_resource`,`request_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]],
+    } },
+    { id = '002_access_grants', statements = {
+        [[CREATE TABLE IF NOT EXISTS `feather_access_grants` (
+            `grant_id` CHAR(36) NOT NULL, `target_type` VARCHAR(64) NOT NULL,
+            `target_id` CHAR(36) NOT NULL, `target_epoch` BIGINT UNSIGNED NOT NULL,
+            `grantee_type` VARCHAR(16) NOT NULL, `grantee_id` CHAR(36) NOT NULL,
+            `capability` VARCHAR(64) NOT NULL, `roles_json` TEXT NOT NULL,
+            `valid_from` BIGINT UNSIGNED NOT NULL, `valid_until` BIGINT UNSIGNED NOT NULL,
+            `status` VARCHAR(16) NOT NULL, `revision` BIGINT UNSIGNED NOT NULL,
+            `source_resource` VARCHAR(100) NOT NULL, `provenance_type` VARCHAR(64) NOT NULL,
+            `provenance_id` CHAR(36) NOT NULL, `actor_json` TEXT NOT NULL,
+            PRIMARY KEY (`grant_id`),
+            KEY `ix_access_target` (`target_type`,`target_id`,`grant_id`),
+            KEY `ix_access_grantee` (`grantee_type`,`grantee_id`,`grant_id`),
+            KEY `ix_access_check` (`target_type`,`target_id`,`capability`,`status`,`grantee_type`,`grantee_id`),
+            CONSTRAINT `chk_access_validity` CHECK (`valid_until` > `valid_from`),
+            CONSTRAINT `chk_access_status` CHECK (`status` IN ('active','revoked')),
+            CONSTRAINT `chk_access_grantee` CHECK (`grantee_type` IN ('character','organization'))
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]],
+        [[CREATE TABLE IF NOT EXISTS `feather_access_events` (
+            `event_id` CHAR(36) NOT NULL, `grant_id` CHAR(36) NOT NULL,
+            `event_type` VARCHAR(64) NOT NULL, `payload_json` LONGTEXT NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`event_id`), KEY `ix_access_event_grant` (`grant_id`),
+            CONSTRAINT `fk_access_event_grant` FOREIGN KEY (`grant_id`) REFERENCES `feather_access_grants` (`grant_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]],
+        [[CREATE TABLE IF NOT EXISTS `feather_access_outbox` (
+            `event_id` CHAR(36) NOT NULL, `event_type` VARCHAR(64) NOT NULL,
+            `payload_json` LONGTEXT NOT NULL, `status` VARCHAR(16) NOT NULL DEFAULT 'pending',
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`event_id`), KEY `ix_access_pending` (`status`,`event_id`),
+            CONSTRAINT `fk_access_outbox_event` FOREIGN KEY (`event_id`) REFERENCES `feather_access_events` (`event_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]],
     } },
 }

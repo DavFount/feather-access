@@ -22,6 +22,8 @@ server_scripts {
     'server/dependencies.lua',
     'server/migrations.lua',
     'server/providers.lua',
+    'server/grant_support.lua',
+    'server/grants.lua',
     'server/exports.lua',
     'server/commands.lua',
     'server/main.lua',

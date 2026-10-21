@@ -1,6 +1,7 @@
 Access = {}
 
 local health = { state = 'starting', phase = 'not_started', contract = 1 }
+function Access.LocalReady() return health.state == 'ready' end
 
 function Access.Copy(value)
     if type(value) ~= 'table' then return value end
@@ -54,8 +55,8 @@ function Access.GetCapabilities()
         features = {
             lifecycle = 1, health = 1,
             migrations = 1, targetProviders = 1, membershipProviders = 1,
-            grants = 0, revocation = 0, capabilityChecks = 0,
-            grantLists = 0, auditRecords = 0, outbox = 0,
+            grants = 1, revocation = 1, capabilityChecks = 1,
+            grantLists = 1, auditRecords = 1, outbox = 1, eventPublication = 0,
             inventoryIntegration = 0, propertyIntegration = 0, assetsIntegration = 0,
         },
     })
@@ -87,7 +88,9 @@ function Access.ValidateConfig()
         or type(Config.DevMode) ~= 'boolean' then
         return Access.Err('invalid_config', 'Contract 1 and a readiness timeout from 0 to 60000 ms are required.')
     end
-    return Access.Providers.ValidateConfig()
+    local providers = Access.Providers.ValidateConfig()
+    if not providers.ok then return providers end
+    return Access.Grants.ValidateConfig()
 end
 
 function Access.Uuid(value)
