@@ -1,4 +1,5 @@
 AddEventHandler('onResourceStop', function(resource)
+    Access.Employment.Stopped(resource)
     Access.Providers.DropOwner(resource)
     if resource == GetCurrentResourceName() then
         Access.Audit.Stop()
@@ -29,6 +30,8 @@ CreateThread(function()
         local publisher = Access.Audit.Start()
         if not publisher.ok then return publisher end
         Access.SetState('ready', 'providers_ready')
+        local employment = Access.Employment.Start()
+        if not employment.ok then return employment end
         print(('[feather-access] event=migrations.verified applied=%d total=%d'):format(
             migrated.value.applied, migrated.value.total))
         return Access.Ok(true)

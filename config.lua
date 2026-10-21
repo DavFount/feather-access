@@ -3,6 +3,9 @@ Config = {
     RequiredCoreContract = 1,
     ReadinessTimeoutMs = 30000,
     DevMode = true,
+    -- Explicit organization UUID -> { jobIds = { job UUIDs }, dutyState = 'any'|'on_duty' }.
+    -- Roles are exact 'grade.<grade UUID>' selectors, never grade ordinals.
+    Employment = { Scopes = {} },
     Audit = {
         Enabled = true, SourceInstance = 'default',
         PollIntervalMs = 1000, BatchSize = 10, LeaseSeconds = 30,
@@ -22,6 +25,12 @@ Config = {
 
 -- Isolated acceptance resource only. Never enable this on production.
 if Config.DevMode then
+    Config.Grants.Managers['feather-jobs-tests'] = true
+    Config.Grants.Readers['feather-jobs-tests'] = true
+    Config.Providers.TrustedReaders['feather-jobs-tests'] = true
+    Config.Providers.Targets['access_test.employment'] = {
+        resource = 'feather-jobs-tests', capabilities = { 'employment.use' },
+    }
     Config.Grants.Managers['feather-access-tests'] = true
     Config.Grants.Readers['feather-access-tests'] = true
     Config.Grants.Auditors['feather-access-tests'] = true

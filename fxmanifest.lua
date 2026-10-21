@@ -31,6 +31,7 @@ server_scripts {
     'server/dependencies.lua',
     'server/migrations.lua',
     'server/providers.lua',
+    'server/employment.lua',
     'server/grant_support.lua',
     'server/grants.lua',
     'server/audit.lua',

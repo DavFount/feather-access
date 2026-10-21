@@ -59,6 +59,7 @@ function Access.GetCapabilities()
             grants = 1, revocation = 1, capabilityChecks = 1,
             grantLists = 1, auditRecords = 1, outbox = 1, eventPublication = Config.Audit.Enabled and 1 or 0,
             inventoryIntegration = 0, propertyIntegration = 0, assetsIntegration = 0,
+            employmentIntegration = 1,
         },
     })
 end
@@ -93,6 +94,10 @@ function Access.ValidateConfig()
     if not providers.ok then return providers end
     local grants = Access.Grants.ValidateConfig()
     if not grants.ok then return grants end
+    if Access.Employment then
+        local employment = Access.Employment.ValidateConfig()
+        if not employment.ok then return employment end
+    end
     return Access.Audit.ValidateConfig()
 end
 

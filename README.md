@@ -1,5 +1,20 @@
 # Feather Access
 
+## Jobs-backed organization grants
+
+Config.Employment.Scopes maps exact organization UUIDs to jobIds and dutyState
+('any' or 'on_duty'). Jobs/Organizations must trust feather-access as a reader.
+Each selected role is grade.<stable grade UUID>; numeric rank confers no implicit
+permission. Active organization/job/grade and current matching employment are
+required. Suspended duty never qualifies. Scopes default empty; configure before
+restart. Bounds: 128 scopes, 8 jobs/scope and 32 active grades/scope. Do not also
+configure a custom membership provider for the same organization.
+
+Jobs/Organizations outages fail employment resolution closed. They remain runtime
+providers, not hard startup dependencies. Checks read current facts; they do not
+lock another domain's mutation transaction. EmploymentFixtureScope is restricted
+to the exact development fixture caller, not a production registration API.
+
 Server-only durable capability delegation in Feather.
 
 Requires `feather-core` Contract 1 and `feather-mysql`. Start both first, then
