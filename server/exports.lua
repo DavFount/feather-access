@@ -12,3 +12,18 @@ end
 Register('GetCapabilities', Access.GetCapabilities)
 Register('GetHealth', Access.GetHealth)
 Register('AwaitReady', Access.AwaitReady)
+
+local function ProviderExport(name, handler)
+    Register(name, function(request)
+        -- Capture caller before yielding. Payload fields never establish ownership.
+        local caller = GetInvokingResource()
+        return handler(request, caller)
+    end)
+end
+
+ProviderExport('RegisterTargetProvider', Access.Providers.RegisterTarget)
+ProviderExport('UnregisterTargetProvider', Access.Providers.UnregisterTarget)
+ProviderExport('RegisterMembershipProvider', Access.Providers.RegisterMembership)
+ProviderExport('UnregisterMembershipProvider', Access.Providers.UnregisterMembership)
+ProviderExport('ResolveTargetContext', Access.Providers.ResolveTarget)
+ProviderExport('ResolveMembershipContext', Access.Providers.ResolveMembership)

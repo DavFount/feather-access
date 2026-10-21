@@ -32,17 +32,28 @@ function Access.Fail(result)
     return result
 end
 
-function Access.GetHealth() return Access.Ok(Access.Copy(health)) end
+function Access.GetHealth()
+    if health.state == 'ready' then
+        local called, result = pcall(Access.CheckDependencies)
+        if not called or not result.ok then
+            Access.Fail(Access.Err('dependency_unavailable', 'A required dependency is unavailable. Restart Access.'))
+        end
+    end
+    local snapshot = Access.Copy(health)
+    snapshot.migrations = Access.Copy(Access.MigrationStatus)
+    snapshot.providers = Access.Providers and Access.Providers.Counts() or nil
+    return Access.Ok(snapshot)
+end
 
 function Access.GetCapabilities()
     return Access.Ok({
         resource = GetCurrentResourceName(),
         version = GetResourceMetadata(GetCurrentResourceName(), 'version', 0),
         contract = 1,
-        state = health.state,
+        state = Access.GetHealth().value.state,
         features = {
             lifecycle = 1, health = 1,
-            migrations = 0, targetProviders = 0, membershipProviders = 0,
+            migrations = 1, targetProviders = 1, membershipProviders = 1,
             grants = 0, revocation = 0, capabilityChecks = 0,
             grantLists = 0, auditRecords = 0, outbox = 0,
             inventoryIntegration = 0, propertyIntegration = 0, assetsIntegration = 0,
@@ -72,8 +83,29 @@ end
 
 function Access.ValidateConfig()
     if type(Config) ~= 'table' or Config.Contract ~= 1 or Config.RequiredCoreContract ~= 1
-        or not Access.Integer(Config.ReadinessTimeoutMs, 0, 60000) then
+        or not Access.Integer(Config.ReadinessTimeoutMs, 0, 60000)
+        or type(Config.DevMode) ~= 'boolean' then
         return Access.Err('invalid_config', 'Contract 1 and a readiness timeout from 0 to 60000 ms are required.')
     end
+    return Access.Providers.ValidateConfig()
+end
+
+function Access.Uuid(value)
+    return type(value) == 'string' and value:match(
+        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') ~= nil
+end
+
+function Access.Key(value)
+    return type(value) == 'string' and #value <= 64 and value:match('^[a-z][a-z0-9_.-]*$') ~= nil
+end
+
+function Access.OnlyFields(value, fields)
+    if type(value) ~= 'table' or getmetatable(value) ~= nil then return false end
+    for key in pairs(value) do if not fields[key] then return false end end
+    return true
+end
+
+function Access.Ready()
+    if Access.GetHealth().value.state ~= 'ready' then return Access.Err('not_ready', 'Access is not ready.') end
     return Access.Ok(true)
 end

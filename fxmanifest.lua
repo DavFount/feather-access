@@ -20,7 +20,10 @@ server_scripts {
     'config.lua',
     'server/foundation.lua',
     'server/dependencies.lua',
+    'server/migrations.lua',
+    'server/providers.lua',
     'server/exports.lua',
+    'server/commands.lua',
     'server/main.lua',
 }
 
