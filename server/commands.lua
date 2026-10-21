@@ -17,6 +17,44 @@ RegisterCommand('AccessStatus', function(source)
         tostring(Config.Grants.Auditors['feather-access-tests'] == true)))
 end, true)
 
+RegisterCommand('AccessAuditStatus', function(source)
+    if source ~= 0 then return end
+    CreateThread(function()
+        local called, failure = pcall(function()
+            local state, counts = Access.Audit.State(), Access.Audit.Counts()
+            print(('[AccessAuditStatus] running=%s paused=%s busy=%s auditAvailable=%s transportActive=%s pending=%d leased=%d delivered=%d quarantined=%d'):format(
+                tostring(state.running), tostring(state.paused), tostring(state.busy), tostring(state.auditAvailable), tostring(state.transportActive),
+                counts.pending, counts.leased, counts.delivered, counts.quarantined))
+            if state.lastError then print('[AccessAuditStatus] error=' .. state.lastError) end
+        end)
+        if not called then print('[AccessAuditStatus] unavailable; verify database/resource readiness') end
+    end)
+end, true)
+
+RegisterCommand('AccessAuditRetry', function(source, args)
+    if source ~= 0 then return end
+    CreateThread(function()
+        local called, result = pcall(Access.Audit.RetryQuarantine, args[1])
+        print('[AccessAuditRetry] ' .. (called and result.ok and 'PASS event requeued without changing payload'
+            or 'FAIL ' .. tostring(called and result.code or 'database_unavailable')))
+    end)
+end, true)
+
+RegisterCommand('AccessAuditInspect', function(source, args)
+    if source ~= 0 then return end
+    if not Access.Uuid(args[1]) then print('[AccessAuditInspect] usage: AccessAuditInspect <event-UUID>'); return end
+    CreateThread(function()
+        local called = pcall(function()
+            local row = DB.one([[SELECT `event_id`,`event_type`,`status`,`attempt_count`,`last_result`,`audit_event_id`
+                FROM `feather_access_outbox` WHERE `event_id`=?]], args[1]:lower())
+            if not row then print('[AccessAuditInspect] not found'); return end
+            print(('[AccessAuditInspect] eventId=%s type=%s state=%s attempts=%s result=%s auditId=%s'):format(
+                row.event_id, row.event_type, row.status, tostring(row.attempt_count), tostring(row.last_result), tostring(row.audit_event_id)))
+        end)
+        if not called then print('[AccessAuditInspect] database unavailable') end
+    end)
+end, true)
+
 RegisterCommand('AccessReleaseContractSmokeTest', function(source)
     if source ~= 0 then return end
     local caps, health = Access.GetCapabilities().value, Access.GetHealth().value

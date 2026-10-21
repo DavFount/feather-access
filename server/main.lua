@@ -1,11 +1,14 @@
 AddEventHandler('onResourceStop', function(resource)
     Access.Providers.DropOwner(resource)
     if resource == GetCurrentResourceName() then
+        Access.Audit.Stop()
         Access.SetState('stopped', 'resource_stopped')
     elseif resource == 'feather-core' or resource == 'feather-mysql' then
+        Access.Audit.Stop()
         Access.Fail(Access.Err('dependency_unavailable',
             'A required dependency stopped. Restart Access after it is ready.', { resource = resource }))
-    end
+    elseif resource == 'feather-audit' then Access.Audit.AuditStopped()
+    elseif resource == 'feather-access-tests' then Access.Audit.FixtureStopped() end
 end)
 
 CreateThread(function()
@@ -23,6 +26,8 @@ CreateThread(function()
         if Access.GetHealth().value.state == 'failed' then
             return Access.Err('dependency_unavailable', 'A dependency stopped during startup; restart Access.')
         end
+        local publisher = Access.Audit.Start()
+        if not publisher.ok then return publisher end
         Access.SetState('ready', 'providers_ready')
         print(('[feather-access] event=migrations.verified applied=%d total=%d'):format(
             migrated.value.applied, migrated.value.total))

@@ -43,6 +43,7 @@ function Access.GetHealth()
     local snapshot = Access.Copy(health)
     snapshot.migrations = Access.Copy(Access.MigrationStatus)
     snapshot.providers = Access.Providers and Access.Providers.Counts() or nil
+    snapshot.audit = Access.Audit and Access.Audit.State() or nil
     return Access.Ok(snapshot)
 end
 
@@ -56,7 +57,7 @@ function Access.GetCapabilities()
             lifecycle = 1, health = 1,
             migrations = 1, targetProviders = 1, membershipProviders = 1,
             grants = 1, revocation = 1, capabilityChecks = 1,
-            grantLists = 1, auditRecords = 1, outbox = 1, eventPublication = 0,
+            grantLists = 1, auditRecords = 1, outbox = 1, eventPublication = Config.Audit.Enabled and 1 or 0,
             inventoryIntegration = 0, propertyIntegration = 0, assetsIntegration = 0,
         },
     })
@@ -90,7 +91,9 @@ function Access.ValidateConfig()
     end
     local providers = Access.Providers.ValidateConfig()
     if not providers.ok then return providers end
-    return Access.Grants.ValidateConfig()
+    local grants = Access.Grants.ValidateConfig()
+    if not grants.ok then return grants end
+    return Access.Audit.ValidateConfig()
 end
 
 function Access.Uuid(value)

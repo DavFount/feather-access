@@ -2,7 +2,12 @@ Config = {
     Contract = 1,
     RequiredCoreContract = 1,
     ReadinessTimeoutMs = 30000,
-    DevMode = false,
+    DevMode = true,
+    Audit = {
+        Enabled = true, SourceInstance = 'default',
+        PollIntervalMs = 1000, BatchSize = 10, LeaseSeconds = 30,
+        InitialRetrySeconds = 2, MaximumRetrySeconds = 60, TransportTimeoutMs = 3000,
+    },
     Grants = { Managers = {}, Readers = {}, Auditors = {}, MaxValidityMs = 31622400000, CheckTimeoutMs = 5000 },
     Providers = {
         TimeoutMs = 2000,

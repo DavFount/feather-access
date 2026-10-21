@@ -196,4 +196,5 @@ function G.Record(tx, eventId, eventType, grant, actor, request)
         eventId, grant.grantId, eventType, encoded)
     tx.exec([[INSERT INTO `feather_access_outbox` (`event_id`,`event_type`,`payload_json`) VALUES (?,?,?)]],
         eventId, eventType, encoded)
+    Access.Audit.Enqueue(tx, payload)
 end

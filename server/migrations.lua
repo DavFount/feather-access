@@ -1,5 +1,5 @@
 Access.Migrations = {}
-Access.MigrationStatus = { total = 2, applied = 0, verified = false }
+Access.MigrationStatus = { total = 3, applied = 0, verified = false }
 
 local definitions = {
     { id = '001_access_receipts', statements = {
@@ -45,6 +45,20 @@ local definitions = {
             PRIMARY KEY (`event_id`), KEY `ix_access_pending` (`status`,`event_id`),
             CONSTRAINT `fk_access_outbox_event` FOREIGN KEY (`event_id`) REFERENCES `feather_access_events` (`event_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]],
+    } },
+    { id = '003_access_audit_delivery', statements = {
+        [[ALTER TABLE `feather_access_outbox`
+            ADD COLUMN IF NOT EXISTS `audit_payload` LONGTEXT NULL,
+            ADD COLUMN IF NOT EXISTS `audit_canonical` LONGTEXT NULL,
+            ADD COLUMN IF NOT EXISTS `attempt_count` INT UNSIGNED NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `available_at` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `lease_owner` CHAR(36) NULL,
+            ADD COLUMN IF NOT EXISTS `lease_until` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `audit_event_id` CHAR(36) NULL,
+            ADD COLUMN IF NOT EXISTS `last_result` VARCHAR(64) NULL,
+            ADD COLUMN IF NOT EXISTS `delivered_at` TIMESTAMP NULL]],
+        [[CREATE INDEX IF NOT EXISTS `ix_access_audit_queue`
+            ON `feather_access_outbox` (`status`,`available_at`,`lease_until`,`event_id`)]],
     } },
 }
 

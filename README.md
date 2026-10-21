@@ -143,12 +143,51 @@ the required trust group/action and available policy decision metadata. Staff
 ownership is separate from service-principal authorization.
 
 Access owns its schema-migration ledger, receipts, grants, audit events and pending
-outbox. State, receipt, event and outbox writes commit together. `eventPublication`
-remains zero: Audit delivery is not implemented yet. Preserve all these tables
-together for backup/restore. No production domain adapter or Inventory ACL cutover
+outbox. State, receipt, local fact and immutable Audit envelope commit together.
+When the configured publisher is enabled, `eventPublication=1` means Audit delivery
+support; it does not mean that Audit is currently ready or every row has delivered.
+Preserve all these tables together for backup/restore. No production domain adapter or Inventory ACL cutover
 is enabled. No transfer-preservation workflow, client UI or reservation for later
 gameplay mutations is implemented. Checks overlapping revocation/transfer may order
 either way; consumers must enforce their own mutation-boundary safeguards.
+
+## Audit delivery
+
+Audit is optional at runtime: grants still commit when it is stopped. Access uses
+a vendored Audit Contract 1 producer kit under `lib/audit`, so event construction
+and enqueueing require no Audit exports. Its publisher sends committed envelopes
+to `feather-audit:Ingest`. Audit must load the Access grant schemas and explicitly
+register `feather-access` for the `access.grant.` prefix/version 1.
+
+`Config.Audit.SourceInstance` must match Audit's producer registration (default
+`default`). Keep it stable: it is persisted deduplication identity. Existing queued
+envelopes retain their original instance and timestamp across config changes.
+Migration 003 upgrades the existing outbox; historical pending facts gain an
+envelope under a row lock before first delivery, preserving event UUID/time.
+
+`Config.Audit.Enabled=true` starts the publisher; false pauses delivery while new
+mutations still enqueue. Other defaults are poll 1000 ms, batch 10, lease 30 s,
+retry ceiling 2–60 s and transport timeout 3000 ms. The per-call timeout is bounded
+to 100–10000 ms, batch to 1–100, and lease to 30–600 s. Retries use jitter/backoff;
+an expired lease is reclaimable after restart. A hung transport retains its single
+slot until return or Audit stop; late acknowledgements cannot overwrite newer work.
+
+Accepted/duplicate responses with a valid Audit UUID mark a row delivered.
+Retryable failures retain the original envelope. Quarantine stops automatic retry
+and prints the event UUID and safe code. Console-only operator commands:
+
+- `AccessAuditStatus`: publisher availability and pending/leased/delivered/quarantined counts.
+- `AccessAuditInspect <event-UUID>`: one row's state, attempts, result and acknowledgement ID.
+- `AccessAuditRetry <event-UUID>`: requeue a quarantined event after its external
+  configuration/schema issue is fixed, preserving its validated envelope. It
+  refuses corrupted payloads and never repairs them by changing event identity.
+
+`GetHealth().value.audit` contains lightweight publisher state. Audit outage does
+not change domain readiness; observe the outbox separately. Test controls require
+DevMode and the exact sibling fixture caller; stopping that fixture clears any
+test pause. Local DevMode is enabled for the owner's development servers. Disable
+fixture trust when preparing a production configuration; ordinary development does
+not require repeating that packaging check after each increment.
 
 Design and implementation documentation lives in
 [feather-framework-docs](../feather-framework-docs/feather-access/ACCESS_IMPLEMENTATION_PLAN.md).
