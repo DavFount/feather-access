@@ -44,6 +44,7 @@ function Access.GetHealth()
     snapshot.migrations = Access.Copy(Access.MigrationStatus)
     snapshot.providers = Access.Providers and Access.Providers.Counts() or nil
     snapshot.audit = Access.Audit and Access.Audit.State() or nil
+    snapshot.inventoryFence = Access.InventoryFence and Access.InventoryFence.State() or nil
     return Access.Ok(snapshot)
 end
 
@@ -58,8 +59,9 @@ function Access.GetCapabilities()
             migrations = 1, targetProviders = 1, membershipProviders = 1,
             grants = 1, revocation = 1, capabilityChecks = 1,
             grantLists = 1, auditRecords = 1, outbox = 1, eventPublication = Config.Audit.Enabled and 1 or 0,
-            inventoryIntegration = 0, propertyIntegration = 0, assetsIntegration = 0,
+            inventoryIntegration = 1, propertyIntegration = 1, assetsIntegration = 1,
             employmentIntegration = 1,
+            transferPreservation = 1,
         },
     })
 end

@@ -185,7 +185,8 @@ function G.Check(request, caller)
         or fresh.value.provider.generation ~= context.value.provider.generation
         or not G.Capability(fresh.value, request.capability) then return denied end
     local placeholders = {}; for _ in ipairs(matched) do placeholders[#placeholders + 1] = '?' end
-    local row = DB.one([[SELECT `grant_id` FROM `feather_access_grants` WHERE `grant_id` IN (]] .. table.concat(placeholders, ',') .. [[)
+    local row = DB.one([[SELECT `grant_id`,`valid_until`,FLOOR(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3))*1000) AS now_ms
+        FROM `feather_access_grants` WHERE `grant_id` IN (]] .. table.concat(placeholders, ',') .. [[)
         AND `status`='active' AND `valid_from`<=FLOOR(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3))*1000)
         AND `valid_until`>FLOOR(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3))*1000) ORDER BY `grant_id` LIMIT 1]], table.unpack(matched))
     local current = G.Current(actor)
@@ -193,7 +194,8 @@ function G.Check(request, caller)
     if GetGameTimer() - started >= Config.Grants.CheckTimeoutMs then
         return Access.Err('operation_timeout', 'Capability check exceeded its context budget.')
     end
-    return Access.Ok({ allowed = row ~= nil, grantId = row and row.grant_id or nil })
+    return Access.Ok({ allowed = row ~= nil, grantId = row and row.grant_id or nil,
+        validForMs = row and math.max(0, tonumber(row.valid_until) - tonumber(row.now_ms)) or nil })
 end
 
 local function List(request, caller, target)

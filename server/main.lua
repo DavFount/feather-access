@@ -1,4 +1,5 @@
 AddEventHandler('onResourceStop', function(resource)
+    Access.InventoryFence.Stopped(resource)
     Access.Employment.Stopped(resource)
     Access.Providers.DropOwner(resource)
     if resource == GetCurrentResourceName() then

@@ -1,5 +1,5 @@
 Access.Migrations = {}
-Access.MigrationStatus = { total = 3, applied = 0, verified = false }
+Access.MigrationStatus = { total = 4, applied = 0, verified = false }
 
 local definitions = {
     { id = '001_access_receipts', statements = {
@@ -67,6 +67,15 @@ local function Checksum(statements)
     for index = 1, #input do hash = ((hash ~ input:byte(index)) * 16777619) & 0xffffffff end
     return ('fnv1a32:%08x'):format(hash)
 end
+
+definitions[#definitions + 1] = {id='004_access_preservation_manifests', statements={[[
+    CREATE TABLE IF NOT EXISTS `feather_access_preservation_manifests` (
+        `manifest_id` CHAR(36) NOT NULL PRIMARY KEY, `target_type` VARCHAR(64) NOT NULL,
+        `target_id` CHAR(36) NOT NULL, `source_epoch` BIGINT UNSIGNED NOT NULL,
+        `candidates_json` LONGTEXT NOT NULL, `actor_json` LONGTEXT NOT NULL,
+        `status` VARCHAR(16) NOT NULL DEFAULT 'prepared',
+        `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]]}}
 
 function Access.Migrations.Run()
     DB.exec([[CREATE TABLE IF NOT EXISTS `feather_access_schema_migrations` (

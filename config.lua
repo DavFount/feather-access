@@ -16,15 +16,31 @@ Config = {
         TimeoutMs = 2000,
         MaxInFlight = 32,
         -- Exact target type -> authoritative resource and allowed vocabulary.
-        Targets = {},
+        Targets = {
+            ['property.property'] = {resource = 'feather-property', capabilities = {'property.enter'}},
+            ['assets.asset'] = {resource = 'feather-assets', capabilities = {'asset.retrieve'}},
+            ['inventory.storage'] = {resource = 'feather-inventory', capabilities = {'inventory.read', 'inventory.insert', 'inventory.remove'}},
+        },
         -- Organization UUID -> authoritative membership resource.
         Memberships = {},
         TrustedReaders = { ['feather-access'] = true },
     },
 }
 
+Config.Grants.Managers['feather-inventory'] = true
+Config.Grants.Managers['feather-assets'] = true
+Config.Grants.Managers['feather-property'] = true
+Config.Grants.Readers['feather-property'] = true
+Config.Providers.TrustedReaders['feather-property'] = true
+Config.Grants.Readers['feather-assets'] = true
+Config.Providers.TrustedReaders['feather-assets'] = true
+Config.Grants.Readers['feather-inventory'] = true
+Config.Providers.TrustedReaders['feather-inventory'] = true
+
 -- Isolated acceptance resource only. Never enable this on production.
 if Config.DevMode then
+    Config.Grants.Readers['feather-assets-access-tests']=true
+    Config.Grants.Readers['feather-property-access-tests']=true
     Config.Grants.Managers['feather-jobs-tests'] = true
     Config.Grants.Readers['feather-jobs-tests'] = true
     Config.Providers.TrustedReaders['feather-jobs-tests'] = true

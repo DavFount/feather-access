@@ -93,15 +93,18 @@ local function Register(bucket, key, resolver, caller, owner, extra)
 end
 
 function Access.Providers.RegisterTarget(request, caller)
-    if not Access.OnlyFields(request, { targetType = true, contract = true, resolve = true, authorize = true })
+    if not Access.OnlyFields(request, { targetType = true, contract = true, resolve = true, authorize = true, transfer = true })
         or not Access.Key(request.targetType) or request.contract ~= 1 then
         return Access.Err('invalid_input', 'Target type, Contract 1 and resolver are required.')
     end
     if request.authorize ~= nil and not Callable(request.authorize) then
         return Access.Err('invalid_input', 'Target authorization callback must be callable.')
     end
+    if request.transfer ~= nil and not Callable(request.transfer) then return Access.Err('invalid_input','Transfer proof callback must be callable.') end
     local definition = Config.Providers.Targets[request.targetType]
-    return Register(targets, request.targetType, request.resolve, caller, definition and definition.resource, request.authorize)
+    local result=Register(targets, request.targetType, request.resolve, caller, definition and definition.resource, request.authorize)
+    if result.ok then targets[request.targetType].transfer=request.transfer end
+    return result
 end
 
 function Access.Providers.RegisterMembership(request, caller)
@@ -181,6 +184,22 @@ end
 
 -- Internal service helpers; no arbitrary callback invocation is exported.
 Access.Providers.RoleIds = function(value) return Keys(value, 32, true) end
+
+function Access.Providers.TransferProof(context, actor, request, manifest)
+    local entry=targets[context.targetType]
+    if not entry or not entry.transfer or entry.generation~=context.provider.generation then
+        return Access.Err('provider_unavailable','Current transfer-proof provider required.')
+    end
+    local invoked=Invoke(targets,entry,{target=Access.Copy(context),actor=Access.Copy(actor),
+        manifestId=manifest.manifest_id,sourceEpoch=tonumber(manifest.source_epoch),
+        transferResource=request.transferResource,transferRequestId=request.transferRequestId},entry.transfer)
+    if not invoked.ok then return invoked end
+    local result=invoked.value
+    if type(result)~='table' or result.ok~=true or type(result.value)~='table' or result.value.allowed~=true then
+        return Access.Err('authorization_denied','New owner or committed transfer proof did not match.')
+    end
+    return Access.Ok(true)
+end
 
 function Access.Providers.Authorize(context, actor, action, capability)
     local entry = targets[context.targetType]
@@ -315,4 +334,12 @@ function Access.Providers.Counts()
     for _ in pairs(targets) do counts.targets = counts.targets + 1 end
     for _ in pairs(memberships) do counts.memberships = counts.memberships + 1 end
     return counts
+end
+
+-- Internal read-only release diagnostics; no target lookup or grant operation.
+function Access.Providers.TargetStatus(targetType,resource)
+    local entry=targets[targetType]
+    local definition=Config.Providers.Targets[targetType]
+    return definition~=nil and definition.resource==resource and entry~=nil
+        and entry.resource==resource and GetResourceState(resource)=='started'
 end

@@ -190,7 +190,7 @@ end
 
 function G.Record(tx, eventId, eventType, grant, actor, request)
     local payload = { eventId = eventId, eventType = eventType, grant = grant,
-        actor = actor, reasonCode = request.reasonCode, requestId = request.requestId }
+        actor = actor, reasonCode = request.reasonCode, requestId = request.requestId, preservation = request._preservation }
     local encoded = json.encode(payload)
     tx.exec([[INSERT INTO `feather_access_events` (`event_id`,`grant_id`,`event_type`,`payload_json`) VALUES (?,?,?,?)]],
         eventId, grant.grantId, eventType, encoded)

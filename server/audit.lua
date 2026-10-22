@@ -3,7 +3,8 @@ local A = Access.Audit
 local running, paused, busy, engine, enqueueEngine, owner, transport = false, false, false, nil, nil, nil, nil
 local lostAckEvent, lastSummary, lastError
 local fixtureFilter
-local names = { ['access.grant.created.v1'] = 'access.grant.created', ['access.grant.revoked.v1'] = 'access.grant.revoked' }
+local names = { ['access.grant.created.v1'] = 'access.grant.created', ['access.grant.revoked.v1'] = 'access.grant.revoked',
+    ['access.grant.preserved.v1']='access.grant.preserved' }
 
 function A.ValidateConfig()
     local cfg = Config.Audit
@@ -24,7 +25,7 @@ function A.Build(fact, occurredEpoch)
         or type(fact.grant) ~= 'table' or type(fact.actor) ~= 'table' then return nil, 'local_fact_invalid' end
     local grant, actor = fact.grant, fact.actor
     if not Access.Uuid(grant.grantId) or (grant.granteeType ~= 'character' and grant.granteeType ~= 'organization')
-        or (fact.eventType == 'access.grant.created.v1' and grant.status ~= 'active')
+        or ((fact.eventType == 'access.grant.created.v1' or fact.eventType=='access.grant.preserved.v1') and grant.status ~= 'active')
         or (fact.eventType == 'access.grant.revoked.v1' and grant.status ~= 'revoked') then return nil, 'local_fact_invalid' end
     local identity = actor.characterId and { type = 'character', id = actor.characterId,
         accountId = actor.accountId, characterId = actor.characterId, resource = 'feather-access' }
@@ -41,12 +42,16 @@ function A.Build(fact, occurredEpoch)
             { type = grant.granteeType, id = grant.granteeId, role = 'grantee' },
         },
         references = { { resource = 'feather-access', type = 'grant_provenance', id = grant.provenanceId } },
-        result = 'success', reasonCode = grant.status == 'active' and 'grant_created' or 'grant_revoked',
-        summary = grant.status == 'active' and 'Delegated capability granted' or 'Delegated capability revoked',
+        result = 'success', reasonCode = fact.eventType=='access.grant.preserved.v1' and 'grant_preserved' or grant.status == 'active' and 'grant_created' or 'grant_revoked',
+        summary = fact.eventType=='access.grant.preserved.v1' and 'Delegated capability adopted by new owner' or grant.status == 'active' and 'Delegated capability granted' or 'Delegated capability revoked',
         context = { target_type = grant.targetType, capability = grant.capability, status = grant.status,
             revision = grant.revision, target_epoch = grant.epoch, grantee_type = grant.granteeType,
             valid_from = grant.validFrom, valid_until = grant.validUntil, role_ids = grant.roleIds,
-            requestor_resource = actor.resource, reason_code = fact.reasonCode, provenance_type = grant.provenanceType },
+            requestor_resource = actor.resource, reason_code = fact.reasonCode, provenance_type = grant.provenanceType,
+            manifest_id=fact.preservation and fact.preservation.manifestId,
+            source_epoch=fact.preservation and fact.preservation.sourceEpoch,
+            transfer_resource=fact.preservation and fact.preservation.transferResource,
+            transfer_request_id=fact.preservation and fact.preservation.transferRequestId },
         sensitivityClass = 'restricted', retentionClass = 'security',
     })
     if not event then return nil, type(validation) == 'table' and validation.code or 'envelope_invalid' end

@@ -1,5 +1,65 @@
 # Feather Access
 
+## 0.1.0 alpha scope
+
+Character/organization grantees, exact organization role selectors, real Inventory
+delegation, character-owned Assets/Property grants and explicit post-transfer
+adoption are in scope. DevMode=true is intentional. Organization-owned grant
+management and Inventory transfer preservation are deferred and fail closed/
+default to invalidation. Actual world gameplay and unverified multiplayer/crash/
+restore scenarios are not release acceptance claims.
+
+`AccessAlphaReleaseSmokeTest` is a console-only read-only gate for this scope:
+readiness, four verified migrations, all three real providers, exact service
+policy, healthy mutation fence and empty/available Audit queue. Expect16/16.
+`AccessReleaseContractSmokeTest` remains the separate production-posture check
+requiring development disabled; do not toggle DevMode merely to run it in alpha.
+
+## Explicit transfer adoption
+
+Assets/Property may prepare immutable manifests of up to25 exact grant IDs and
+expected revisions using `PreparePreservation`. The target domain then commits
+its normal ownership transfer, recording `preservationManifestId` and advancing
+its epoch. Delegation denies during this handoff. The authenticated new character
+owner calls `AdoptPreservation` through that domain, selecting a nonempty subset
+of captured grants; receipt proof must match target, manifest and consecutive
+epochs. Grant IDs, recipients, roles/capability and original expiry remain unchanged;
+revisions advance. Revoked, expired, altered or late grants cannot be adopted.
+
+`PreparePreservation` takes requestId, reasonCode, actorSource, targetType,
+targetId, expectedEpoch and grants (`{grantId,expectedRevision}` entries).
+`AdoptPreservation` takes requestId, reasonCode, actorSource, manifestId,
+transferResource, transferRequestId and selected grants. Exact retries replay;
+each manifest adopts once. `FindOperation` recovers the owning broker's receipts.
+Assets/Property expose their corresponding `FindDelegationOperation` wrapper.
+`ResolvePreservationManifest` is restricted to the configured owning target domain
+and proves a committed snapshot exists before its transfer transaction starts.
+
+This is post-transfer adoption, not an atomic cross-resource ownership-and-grant
+commit. Further owner-set changes invalidate stale handoffs. Inventory does not
+currently expose transfer adoption. System/organization-owner adoption is denied.
+Migration004 adds manifests; Audit requires `access.grant.preserved` schema support.
+
+## Inventory integration
+
+inventory.storage uses Inventory's existing UUID and exact inventory.read/insert/
+remove capabilities. Config grants feather-inventory provider, manager and reader
+trust; Admin must load its exact access.grant.manage/read service policy. Inventory
+continues to validate actual target ownership/admin authority. No auditor-wide
+grant or manage capability is given to recipients.
+
+WithInventoryFence(callback) and ValidateInventoryFence(token) are reserved for
+actual feather-inventory. They order normal grant/revoke writes with Inventory's
+prepared SQL mutations; never call provider/CheckCapability SQL from the SQL body.
+CheckCapability now returns validForMs with an allowed grant, a conservative input
+for transaction expiry budgets, not a standalone authorization token. Unexpected
+consumer stop while held latches the fence closed until Access restart; GetHealth
+and AccessStatus expose that state. This is not full-server crash atomicity.
+
+Inventory migration selects native authority per container and preserves legacy
+rows. No automatic conversion or fallback to the old persistent writer. The new
+fence.lua manifest entry requires refresh before restart. Versions unchanged.
+
 ## Jobs-backed organization grants
 
 Config.Employment.Scopes maps exact organization UUIDs to jobIds and dutyState
