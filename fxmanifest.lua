@@ -6,7 +6,7 @@ lua54 'yes'
 name 'feather-access'
 description 'Durable capability delegation for the Feather Framework'
 author 'BCC Scripts'
-version '0.1.0'
+version '0.1.1'
 
 
 files {}
