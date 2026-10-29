@@ -1,5 +1,11 @@
 # Feather Access
 
+Doors target configuration: `doors.group` is owned by `feather-doors` with exact
+`door.lock`/`door.unlock` vocabulary. Doors is a trusted target-context reader only;
+this adds no grant reader/manager or Core grant-service policy. Its current target
+provider denies grant management. Doors owns lifecycle/epoch facts; Access remains
+the only grants authority. See framework docs `feather-doors/ACCESS_TARGET_ACCEPTANCE.md`.
+
 ## 0.1.0 alpha scope
 
 Character/organization grantees, exact organization role selectors, real Inventory

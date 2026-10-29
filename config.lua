@@ -17,6 +17,7 @@ Config = {
         MaxInFlight = 32,
         -- Exact target type -> authoritative resource and allowed vocabulary.
         Targets = {
+            ['doors.group'] = {resource = 'feather-doors', capabilities = {'door.lock','door.unlock'}},
             ['property.property'] = {resource = 'feather-property', capabilities = {'property.enter'}},
             ['assets.asset'] = {resource = 'feather-assets', capabilities = {'asset.retrieve'}},
             ['inventory.storage'] = {resource = 'feather-inventory', capabilities = {'inventory.read', 'inventory.insert', 'inventory.remove'}},
@@ -32,6 +33,8 @@ Config.Grants.Managers['feather-assets'] = true
 Config.Grants.Managers['feather-property'] = true
 Config.Grants.Readers['feather-property'] = true
 Config.Providers.TrustedReaders['feather-property'] = true
+-- Read-only Doors target-context integration. No grant reader/manager authority.
+Config.Providers.TrustedReaders['feather-doors'] = true
 Config.Grants.Readers['feather-assets'] = true
 Config.Providers.TrustedReaders['feather-assets'] = true
 Config.Grants.Readers['feather-inventory'] = true
